@@ -1,0 +1,70 @@
+alias: Feuerwehralarm mit farbiger Lampe (Nachts)
+description: >-
+  Löst eine Aktion aus, wenn eine PowerAlarm-Benachrichtigung in den letzten 3
+  Minuten empfangen wurde (nur zwischen 20:00 und 08:00 Uhr) und setzt die Farbe
+  von light.sideboard je nach Stichwort.
+triggers:
+  - entity_id: sensor.pixel_8_pro_last_notification
+    trigger: state
+conditions:
+  - condition: template
+    value_template: >-
+      {{ state_attr('sensor.pixel_8_pro_last_notification', 'package') ==
+      'de.fittcom.poweralarm' }}
+  - condition: template
+    value_template: >-
+      {{ state_attr('sensor.pixel_8_pro_last_notification', 'category') ==
+      'alarm' }}
+    enabled: false
+  - condition: time
+    after: "20:00:00"
+    before: "08:00:00"
+    enabled: true
+  - condition: template
+    value_template: >-
+      {% set alarm_zeit = state_attr('sensor.pixel_8_pro_last_notification',
+      'post_time') | int / 1000 %} {% set jetzt = now().timestamp() | int %} {{
+      (jetzt - alarm_zeit) < 180 }}
+actions:
+  - variables:
+      alarm_text: >-
+        {{ state_attr('sensor.pixel_8_pro_last_notification', 'android.text') |
+        default('') }}
+      farbe: |-
+        {% if alarm_text | regex_search('F[1-5]') %}
+          darkred
+        {% elif alarm_text | regex_search('H Klemm|H TÜR|H[0-5]') %}
+          yellow
+        {% else %}
+          darkblue
+        {% endif %}
+  - target:
+      entity_id: light.sideboard
+    data:
+      color_name: "{{ farbe }}"
+      brightness: 255
+    action: light.turn_on
+  - target:
+      entity_id:
+        - light.flur_lampe
+        - light.wohnzimmer_lampe
+        - light.schlafzimmer_lampe
+    action: light.turn_on
+    data: {}
+  - data:
+      message: 🚒 Feuerwehralarm erkannt! Einsatz starten.
+    action: notify.mobile_app_pixel_8_pro
+  - delay:
+      hours: 0
+      minutes: 5
+      seconds: 0
+      milliseconds: 0
+  - target:
+      entity_id:
+        - light.sideboard
+        - light.flur_lampe
+        - light.wohnzimmer_lampe
+        - light.schlafzimmer_lampe
+    action: light.turn_off
+    data: {}
+mode: single
